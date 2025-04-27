@@ -142,6 +142,13 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Check if the response status code is not OK, return 502 Bad Gateway
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		http.Error(w, string(bodyBytes), http.StatusBadGateway)
+		return
+	}
+
 	webuiRespBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, "Failed to read WebUI response", http.StatusInternalServerError)
