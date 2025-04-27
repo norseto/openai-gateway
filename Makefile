@@ -5,6 +5,8 @@
 OUT_BIN_DIR=bin
 BINARY_NAME=openai-gateway
 BINARY_PATH=$(OUT_BIN_DIR)/$(BINARY_NAME)
+PLATFORMS=linux/amd64,linux/arm64
+IMG=norseto/openai-gateway
 
 all: build
 
@@ -27,12 +29,13 @@ clean:
 
 help:
 	@echo "Makefile commands:"
-	@echo "  make all   - Build the application"
-	@echo "  make build - Build the binary"
-	@echo "  make run   - Build and run the application"
-	@echo "  make test  - Run tests"
-	@echo "  make clean - Clean up build artifacts"
-	@echo "  make help  - Show this help message"
+	@echo "  make all           - Build the application"
+	@echo "  make build         - Build the binary"
+	@echo "  make run           - Build and run the application"
+	@echo "  make test          - Run tests"
+	@echo "  make clean         - Clean up build artifacts"
+	@echo "  make docker-buildx - Build multi-arch Docker image (amd64, arm64) using buildx"
+	@echo "  make help          - Show this help message"
 
 # Version management targets
 .PHONY: set-version
@@ -56,3 +59,9 @@ tag-release:
 	@echo "Tagging release..."
 	@bash hack/tag-release.sh
 	echo "Release tagged"
+
+.PHONY: docker-buildx
+docker-buildx:
+	docker buildx build --platform $(PLATFORMS) \
+		-t $(IMG) --push \
+		-f Dockerfile .
