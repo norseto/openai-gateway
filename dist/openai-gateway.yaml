@@ -28,7 +28,7 @@ spec:
       - args:
         - --open-webui-url=http://open-webui.default.svc.cluster.local/api
         - --port=8000
-        image: norseto/openai-gateway:v0.1.0-alpha.2
+        image: norseto/openai-gateway:v0.1.0-alpha.3
         livenessProbe:
           httpGet:
             path: /healthz

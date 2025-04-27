@@ -6,4 +6,4 @@ resources:
 images:
 - name: gateway
   newName: norseto/openai-gateway
-  newTag: v0.1.0-alpha.2
+  newTag: v0.1.0-alpha.3
