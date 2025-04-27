@@ -1,6 +1,6 @@
 # OpenAI Gateway Makefile
 
-.PHONY: all build run test clean help
+.PHONY: all build run test clean help set-version get-version build-installer tag-release
 
 OUT_BIN_DIR=bin
 BINARY_NAME=openai-gateway
@@ -33,3 +33,26 @@ help:
 	@echo "  make test  - Run tests"
 	@echo "  make clean - Clean up build artifacts"
 	@echo "  make help  - Show this help message"
+
+# Version management targets
+.PHONY: set-version
+set-version:
+	@echo "Setting version..."
+	@bash hack/set-version.sh $(VERSION)
+
+.PHONY: get-version
+get-version:
+	@echo "Getting version..."
+	@bash hack/get-version.sh
+
+.PHONY: build-installer
+build-installer:
+	@echo "Building installer with image $(IMG)..."
+	@kustomize build config/openai-gateway > dist/openai-gateway.yaml
+	echo "Build completed for $(IMG)"
+
+.PHONY: tag-release
+tag-release:
+	@echo "Tagging release..."
+	@bash hack/tag-release.sh
+	echo "Release tagged"

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: gateway
-        image: your-registry/openai-gateway:latest
+        image: gateway
         ports:
         - containerPort: 8000
         args:
