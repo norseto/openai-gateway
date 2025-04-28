@@ -8,7 +8,8 @@ COPY . .
 RUN go build -o gateway ./cmd/openai-gateway
 
 # Run stage
-FROM alpine:latest
+FROM gcr.io/distroless/static:nonroot
 WORKDIR /app
 COPY --from=builder /app/gateway .
-CMD ["./gateway", "--open-webui-url=http://open-webui.default.svc.cluster.local/api", "--port=8080"]
+USER 65532:65532
+CMD ["./gateway", "--open-webui-url", "http://open-webui.default.svc.cluster.local/api", "--port", "8080"]

@@ -65,3 +65,9 @@ docker-buildx:
 	docker buildx build --platform $(PLATFORMS) \
 		-t $(IMG) --push \
 		-f Dockerfile .
+.PHONY: docker-buildx
+
+docker-build:
+	docker build \
+		-t $(IMG) \
+		-f Dockerfile .
