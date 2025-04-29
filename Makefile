@@ -6,22 +6,26 @@ OUT_BIN_DIR=bin
 BINARY_NAME=openai-gateway
 BINARY_PATH=$(OUT_BIN_DIR)/$(BINARY_NAME)
 PLATFORMS=linux/amd64,linux/arm64
+
 IMG=norseto/openai-gateway
+MODULE_PACKAGE=github.com/norseto/openai-gateway
+GITSHA := $(shell git describe --always)
+LDFLAGS := -ldflags=all=
 
 all: build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
 	mkdir -p $(OUT_BIN_DIR)
-	go build -o $(BINARY_PATH) ./cmd/$(BINARY_NAME)
+	go build $(LDFLAGS)"-X $(MODULE_PACKAGE).GitVersion=$(GITSHA)" -o $(BINARY_PATH) ./cmd/$(BINARY_NAME)
 
 run: build
 	@echo "Running $(BINARY_NAME)..."
-	./$(BINARY_PATH) --open-webui-url=http://localhost:3000 --port=8080
+	./$(BINARY_PATH) serve --open-webui-url=http://localhost:3000 --port=8080
 
 test:
 	@echo "Running tests..."
-	go test ./...
+	go test ./... -coverprofile cover.out
 
 clean:
 	@echo "Cleaning up..."
@@ -63,11 +67,16 @@ tag-release:
 .PHONY: docker-buildx
 docker-buildx:
 	docker buildx build --platform $(PLATFORMS) \
-		-t $(IMG) --push \
+		-t $(IMG) \
+		--build-arg MODULE_PACKAGE=$(MODULE_PACKAGE) \
+		--build-arg GITVERSION=$(GITSHA) \
+		--push \
 		-f Dockerfile .
 .PHONY: docker-buildx
 
 docker-build:
 	docker build \
 		-t $(IMG) \
+		--build-arg MODULE_PACKAGE=$(MODULE_PACKAGE) \
+		--build-arg GITVERSION=$(GITSHA) \
 		-f Dockerfile .

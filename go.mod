@@ -4,12 +4,12 @@ go 1.24.2
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/norseto/k8s-watchdogs v0.0.0-20250428120322-4e91b986de44
+	github.com/norseto/k8s-watchdogs v0.1.0-beta.1
 	github.com/spf13/cobra v1.9.1
 )
 
 require (
-	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -25,10 +25,10 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/apimachinery v0.33.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/utils v0.0.0-20241104163129-6fe5fd82f078 // indirect
-	sigs.k8s.io/controller-runtime v0.19.2 // indirect
+	k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e // indirect
+	sigs.k8s.io/controller-runtime v0.20.4 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )

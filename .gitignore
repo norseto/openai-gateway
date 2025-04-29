@@ -28,3 +28,6 @@
 # Project specific
 bin/
 *.bak
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out

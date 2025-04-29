@@ -1,11 +1,14 @@
 # Build stage
 FROM golang:1.24.2-alpine AS builder
 
+ARG GITVERSION
+ARG MODULE_PACKAGE
+
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o gateway ./cmd/openai-gateway
+RUN go build -ldflags=all="-X ${MODULE_PACKAGE}.GitVersion=${GITVERSION}" -o gateway ./cmd/openai-gateway
 
 # Run stage
 FROM gcr.io/distroless/static:nonroot

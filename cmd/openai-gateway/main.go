@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/go-logr/logr"
+	gw "github.com/norseto/openai-gateway"
 	"github.com/norseto/openai-gateway/internal/gateway"
 	"github.com/norseto/k8s-watchdogs/pkg/logger"
 	"github.com/spf13/cobra"
@@ -17,32 +17,20 @@ func main() {
 		Use:   "openai-gateway",
 		Short: "An OpenAI API gateway",
 		Long:  `An OpenAI API gateway that provides additional features like request/response logging and token usage tracking.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			logger.InitCmdLogger(cmd) // This function should handle necessary flag bindings
-		},
 	}
 	rootCmd.SetContext(ctx)
+	logger.InitCmdLogger(rootCmd, func(cmd *cobra.Command, args []string) {
+		logger.FromContext(cmd.Context()).Info("Starting OpenAI Gateway", "version", gw.RELEASE_VERSION, "git_version", gw.GitVersion)
+	})
 
 	// Add the gateway server command
-	rootCmd.AddCommand(gateway.NewServeCommand()) // Updated function call
+	rootCmd.AddCommand(gateway.NewServeCommand())
 	// Add the quit command
 	rootCmd.AddCommand(gateway.NewQuitCommand())
 
-	// Remove explicit logger flag binding - InitCmdLogger handles this.
-	/*
-	// Bind logger flags to the root command's persistent flags
-	loggerOpts := logger.NewOptions()
-	loggerOpts.BindFlags(rootCmd.PersistentFlags())
-	*/
-
 	if err := rootCmd.Execute(); err != nil {
-		// Use the logger if initialized, otherwise print to stderr
-		log := logger.FromContext(rootCmd.Context()) // Use logger from context
-		if log != (logr.Logger{}) {
-			log.Error(err, "Failed to execute command")
-		} else {
-			_, _ = os.Stderr.WriteString("Failed to execute command: " + err.Error() + "\n")
-		}
+		log := logger.FromContext(rootCmd.Context())
+		log.Error(err, "Failed to execute command")
 		os.Exit(1)
 	}
 }
