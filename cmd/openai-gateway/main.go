@@ -24,7 +24,7 @@ func main() {
 	rootCmd.SetContext(ctx)
 
 	// Add the gateway server command
-	rootCmd.AddCommand(gateway.NewCommand()) // This is the 'serve' command
+	rootCmd.AddCommand(gateway.NewServeCommand()) // Updated function call
 	// Add the quit command
 	rootCmd.AddCommand(gateway.NewQuitCommand())
 

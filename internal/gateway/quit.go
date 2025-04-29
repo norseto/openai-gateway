@@ -13,28 +13,27 @@ import (
 )
 
 const (
-	defaultQuitPort = 8081
-	quitTimeout     = 5 * time.Second
+	quitTimeout = 5 * time.Second
 )
 
 // NewQuitCommand creates a new cobra command for sending the quit signal.
 func NewQuitCommand() *cobra.Command {
-	var quitPort int
-
 	cmd := &cobra.Command{
 		Use:   "quit",
 		Short: "Sends a shutdown signal to a running gateway server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logger.FromContext(cmd.Context())
 
-			targetURL := fmt.Sprintf("http://127.0.0.1:%d/quitquitquit", quitPort)
-			log.Info("Sending shutdown signal", "target_url", targetURL)
+			// Construct the URL using the shared quitPort variable
+			// Host is hardcoded to 127.0.0.1 for security
+			quitURL := fmt.Sprintf("http://127.0.0.1:%d/quitquitquit", quitPort)
+			log.Info("Sending shutdown signal", "url", quitURL)
 
 			client := &http.Client{
 				Timeout: quitTimeout,
 			}
 
-			req, err := http.NewRequest("POST", targetURL, nil)
+			req, err := http.NewRequest("POST", quitURL, nil)
 			if err != nil {
 				log.Error(err, "Failed to create quit request")
 				return fmt.Errorf("failed to create quit request: %w", err)
@@ -49,7 +48,7 @@ func NewQuitCommand() *cobra.Command {
 				}
 				if opErr, ok := err.(*net.OpError); ok {
 					if sysErr, ok := opErr.Err.(*os.SyscallError); ok && sysErr.Err == syscall.ECONNREFUSED {
-						log.Info("Gateway server not found or not running at target address", "target_url", targetURL)
+						log.Info("Gateway server not found or not running at target address", "target_url", quitURL)
 						// Consider this non-fatal for the quit command, as the goal is achieved (server is not running)
 						return nil
 					}
@@ -71,8 +70,7 @@ func NewQuitCommand() *cobra.Command {
 		},
 	}
 
-	// Add flags (e.g., for the internal quit port)
-	cmd.Flags().IntVar(&quitPort, "quit-port", defaultQuitPort, "Internal port the server listens on for the quit signal")
+	cmd.Flags().IntVar(&quitPort, "quit-port", defaultQuitPort, "Internal port for the quit signal server")
 
 	return cmd
 }
