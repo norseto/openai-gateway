@@ -401,9 +401,10 @@ func (h *handler) forwardAndTransform(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context()).WithValues("request_id", randomString(8))
-	log.Info("Health check request received")
+	log.V(1).Info("Health check request received")
 	// Simple health check: check if Open-WebUI is reachable
-	req, err := http.NewRequest("GET", openWebUIURL+"/health", nil) // Assuming /health exists
+	// Assuming /health exists
+	req, err := http.NewRequest("GET", openWebUIURL+"/health", nil)
 	if err != nil {
 		log.Error(err, "Failed to create health check request")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
