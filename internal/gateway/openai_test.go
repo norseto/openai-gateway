@@ -231,17 +231,10 @@ func TestHealthHandler(t *testing.T) {
 }
 
 func TestRandomString(t *testing.T) {
-	// Test the length of the random string
-	length := 10
-	result := randomString(length)
-	if len(result) != length {
-		t.Errorf("Expected string length %d, got %d", length, len(result))
-	}
-
-	// Call multiple times to ensure different strings are generated
-	result2 := randomString(length)
-	if result == result2 {
-		t.Errorf("Expected different random strings, got same: %s", result)
+	result1 := randomString(10)
+	result2 := randomString(10)
+	if result1 == result2 {
+		t.Errorf("Expected different random strings, got same: %s", result1)
 	}
 }
 

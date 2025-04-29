@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"github.com/norseto/k8s-watchdogs/pkg/logger"
 	"github.com/spf13/cobra"
 )
@@ -24,8 +24,10 @@ var (
 	port         int
 	openWebUIURL string
 	quitPort     int
+	shutdownTimeoutSec int
 	defaultPort  int = 8080
 	defaultQuitPort int = 8081
+	defaultShutdownTimeoutSec int = 15
 )
 
 // OpenAI Compatible Request Structure
@@ -86,6 +88,7 @@ func NewServeCommand() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", defaultPort, "Port number to listen on")
 	cmd.Flags().StringVar(&openWebUIURL, "open-webui-url", os.Getenv("OPEN_WEBUI_URL"), "Open-WebUI API endpoint URL (can also be set via OPEN_WEBUI_URL env var)")
 	cmd.Flags().IntVar(&quitPort, "quit-port", defaultQuitPort, "Internal port for the quit signal server")
+	cmd.Flags().IntVar(&shutdownTimeoutSec, "shutdown-timeout", defaultShutdownTimeoutSec, "Timeout for graceful shutdown in seconds")
 	_ = cmd.MarkFlagRequired("open-webui-url")
 
 	return cmd
@@ -194,7 +197,7 @@ func processServe(cmd *cobra.Command, args []string) error {
 	baseLog.Info("Starting graceful shutdown...")
 
 	// Create a context with timeout for shutdown
-	shutdownTimeout := 15 * time.Second
+	shutdownTimeout := time.Duration(shutdownTimeoutSec) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
@@ -427,11 +430,6 @@ func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	log.Info("Health check successful")
 }
 
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, n)
-	for i := range result {
-		result[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(result)
+func randomString(_ int) string {
+	return uuid.NewString()
 }
