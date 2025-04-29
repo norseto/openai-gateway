@@ -24,7 +24,9 @@ func main() {
 	rootCmd.SetContext(ctx)
 
 	// Add the gateway server command
-	rootCmd.AddCommand(gateway.NewCommand())
+	rootCmd.AddCommand(gateway.NewCommand()) // This is the 'serve' command
+	// Add the quit command
+	rootCmd.AddCommand(gateway.NewQuitCommand())
 
 	// Remove explicit logger flag binding - InitCmdLogger handles this.
 	/*

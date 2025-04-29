@@ -2,15 +2,19 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/norseto/k8s-watchdogs/pkg/logger"
 	"github.com/spf13/cobra"
 )
@@ -65,31 +69,115 @@ type OpenWebUIModel struct {
 	Status string `json:"status"`
 }
 
+type handler struct {
+}
+
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Starts the OpenAI compatible gateway server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			startupLog := logger.FromContext(cmd.Context())
+			baseLog := logger.FromContext(cmd.Context())
 
 			if openWebUIURL == "" {
-				startupLog.Error(fmt.Errorf("--open-webui-url is required"), "Startup error")
+				baseLog.Error(fmt.Errorf("--open-webui-url is required"), "Startup error")
 				return fmt.Errorf("--open-webui-url is required")
 			}
 
+			// --- Server Setup ---
+			addr := fmt.Sprintf(":%d", port)
+			quitAddr := "127.0.0.1:8081" // Internal port for quit signal
+
+			// Create handler instance (no logger needed here)
 			h := &handler{}
 
-			http.HandleFunc("/", h.handleRoot)
-			http.HandleFunc("/healthz", h.handleHealth)
+			// Main API Server Mux
+			mainMux := http.NewServeMux()
+			// Wrap handlers to inject logger from request context
+			mainMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				ctx := logr.NewContext(r.Context(), baseLog)
+				h.handleRoot(w, r.WithContext(ctx))
+			})
+			mainMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+				ctx := logr.NewContext(r.Context(), baseLog)
+				h.handleHealth(w, r.WithContext(ctx))
+			})
 
-			addr := fmt.Sprintf(":%d", port)
-			startupLog.Info("Gateway server starting", "address", addr, "forwarding_url", openWebUIURL)
-
-			if err := http.ListenAndServe(addr, nil); err != nil {
-				startupLog.Error(err, "Failed to start server")
-				return err
+			mainSrv := &http.Server{
+				Addr:    addr,
+				Handler: mainMux,
 			}
-			return nil
+
+			// Channel to signal shutdown
+			stopChan := make(chan struct{})
+
+			// Quit Server Mux (Internal)
+			quitMux := http.NewServeMux()
+			quitMux.HandleFunc("/quitquitquit", func(w http.ResponseWriter, r *http.Request) {
+				baseLog.Info("Received shutdown signal via /quitquitquit")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("Initiating shutdown..."))
+				close(stopChan) // Signal shutdown
+			})
+
+			quitSrv := &http.Server{
+				Addr:    quitAddr,
+				Handler: quitMux,
+			}
+
+			// Goroutine to run the main server
+			go func() {
+				baseLog.Info("Gateway server starting", "address", addr, "forwarding_url", openWebUIURL)
+				if err := mainSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					baseLog.Error(err, "Main server ListenAndServe error")
+					close(stopChan) // Signal shutdown on server error too
+				}
+			}()
+
+			// Goroutine to run the quit server
+			go func() {
+				baseLog.Info("Internal quit server starting", "address", quitAddr)
+				if err := quitSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					baseLog.Error(err, "Quit server ListenAndServe error")
+					// Don't necessarily stop the main server if quit server fails, maybe log it
+				}
+			}()
+
+			// --- Wait for shutdown signal ---
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+			select {
+			case sig := <-sigChan:
+				baseLog.Info("Received OS signal, initiating shutdown", "signal", sig.String())
+			case <-stopChan:
+				baseLog.Info("Received internal signal, initiating shutdown")
+			}
+
+			// --- Graceful shutdown ---
+			baseLog.Info("Starting graceful shutdown...")
+
+			// Create a context with timeout for shutdown
+			shutdownTimeout := 15 * time.Second
+			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			defer cancel()
+
+			// Shutdown the main server
+			if err := mainSrv.Shutdown(ctx); err != nil {
+				baseLog.Error(err, "Main server shutdown error")
+			} else {
+				baseLog.Info("Main server gracefully stopped")
+			}
+
+			// Shutdown the quit server
+			if err := quitSrv.Shutdown(ctx); err != nil {
+				baseLog.Error(err, "Quit server shutdown error")
+			} else {
+				baseLog.Info("Quit server gracefully stopped")
+			}
+
+			baseLog.Info("Graceful shutdown complete")
+			return nil // Graceful shutdown is not an error for the command
 		},
 	}
 
@@ -98,9 +186,6 @@ func NewCommand() *cobra.Command {
 	_ = cmd.MarkFlagRequired("open-webui-url")
 
 	return cmd
-}
-
-type handler struct {
 }
 
 func (h *handler) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +371,8 @@ func (h *handler) forwardAndTransform(w http.ResponseWriter, r *http.Request) {
 func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context()).WithValues("request_id", randomString(8))
 	log.Info("Health check request received")
-	req, err := http.NewRequest("GET", openWebUIURL+"/health", nil)
+	// Simple health check: check if Open-WebUI is reachable
+	req, err := http.NewRequest("GET", openWebUIURL+"/health", nil) // Assuming /health exists
 	if err != nil {
 		log.Error(err, "Failed to create health check request")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
