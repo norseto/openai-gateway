@@ -17,7 +17,6 @@ import (
 )
 
 func TestHandler(t *testing.T) {
-	// Set up mock server for OpenWebUI
 	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
@@ -31,47 +30,36 @@ func TestHandler(t *testing.T) {
 	}))
 	defer tsMock.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: tsMock.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Set up the test handler using the handleRoot method
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := logr.NewContext(r.Context(), logr.Discard())
 		h.handleRoot(w, r.WithContext(ctx))
 	})
 
-	// Create a test server
 	ts := httptest.NewServer(testHandler)
 	defer ts.Close()
 
-	// Config already holds the mock server URL, no need to modify global vars
-
-	// Create a test request with proper JSON body
 	reqBody := `{"model": "test-model", "messages": [{"role": "user", "content": "Hello"}]}`
 	req, err := http.NewRequest("POST", ts.URL+"/v1/chat/completions", bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
+		 t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("Failed to send request: %v", err)
+		 t.Fatalf("Failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Verify the response status code
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("Expected status code %d, got %d, body: %s", http.StatusOK, resp.StatusCode, string(body))
@@ -79,7 +67,6 @@ func TestHandler(t *testing.T) {
 }
 
 func TestHandleChatCompletions(t *testing.T) {
-	// Set up mock server for OpenWebUI
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
@@ -93,15 +80,11 @@ func TestHandleChatCompletions(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: ts.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request body
 	chatReq := OpenAIChatRequest{
 		Model: "test-model",
 		Messages: []MessageItem{
@@ -113,46 +96,38 @@ func TestHandleChatCompletions(t *testing.T) {
 	}
 	body, _ := json.Marshal(chatReq)
 
-	// Create a test request
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.handleChatCompletions(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		 t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	var chatResp OpenAIChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
+		 t.Fatalf("Failed to decode response: %v", err)
 	}
 
 	if chatResp.Model != chatReq.Model {
-		t.Errorf("Expected model %s, got %s", chatReq.Model, chatResp.Model)
+		 t.Errorf("Expected model %s, got %s", chatReq.Model, chatResp.Model)
 	}
 	if len(chatResp.Choices) != 1 {
-		t.Errorf("Expected 1 choice, got %d", len(chatResp.Choices))
+		 t.Errorf("Expected 1 choice, got %d", len(chatResp.Choices))
 	}
 	if chatResp.Choices[0].Message.Content != "Hello from mock server" {
-		t.Errorf("Expected response content 'Hello from mock server', got '%s'", chatResp.Choices[0].Message.Content)
+		 t.Errorf("Expected response content 'Hello from mock server', got '%s'", chatResp.Choices[0].Message.Content)
 	}
 }
 
 func TestForwardAndTransform(t *testing.T) {
-	// Set up mock server for OpenWebUI
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
@@ -160,43 +135,32 @@ func TestForwardAndTransform(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: ts.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request
 	req := httptest.NewRequest("GET", "/v1/models", nil)
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.forwardAndTransform(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		 t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
 	if !bytes.Contains(body, []byte("model1")) {
-		t.Errorf("Expected response to contain 'model1', got '%s'", string(body))
+		 t.Errorf("Expected response to contain 'model1', got '%s'", string(body))
 	}
 }
 
 func TestHealthHandler(t *testing.T) {
-	// Set up a mock healthy upstream server
 	tsMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
@@ -206,40 +170,28 @@ func TestHealthHandler(t *testing.T) {
 	}))
 	defer tsMock.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: tsMock.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request
 	req := httptest.NewRequest("GET", "/healthz", nil)
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.handleHealth(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		 t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	// Adjust expected response body to match actual output with newline
-	// Updated to expect "OK" based on the revised handleHealth implementation
 	if string(body) != "OK" {
-		t.Errorf("Expected response body 'OK', got '%s'", string(body))
+		 t.Errorf("Expected response body 'OK', got '%s'", string(body))
 	}
 }
 
@@ -254,12 +206,9 @@ func TestRandomString(t *testing.T) {
 // TestExecute is removed as it tested global variables that no longer exist
 
 func TestHandlerWithInvalidPath(t *testing.T) {
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Provide a dummy URL, it might not be hit depending on the error handling
 		OpenWebUIURL: "http://dummy-url",
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := logr.NewContext(r.Context(), logr.Discard())
@@ -269,17 +218,14 @@ func TestHandlerWithInvalidPath(t *testing.T) {
 	ts := httptest.NewServer(testHandler)
 	defer ts.Close()
 
-	// Create a test request with an invalid path
 	req, err := http.NewRequest("GET", ts.URL+"/invalid/path", nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -287,7 +233,6 @@ func TestHandlerWithInvalidPath(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// Verify the response status code - updating to expect 502 based on current implementation
 	if resp.StatusCode != http.StatusBadGateway {
 		body, _ := io.ReadAll(resp.Body)
 		t.Errorf("Expected status code %d, got %d, body: %s", http.StatusBadGateway, resp.StatusCode, string(body))
@@ -295,27 +240,19 @@ func TestHandlerWithInvalidPath(t *testing.T) {
 }
 
 func TestHandleChatCompletionsWithInvalidJSON(t *testing.T) {
-	// Create a dummy config for the handler
-	// URL doesn't matter here
 	cfg := &Config{}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request with invalid JSON body
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBuffer([]byte(`{invalid json`)))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Call the handler method
 	h.handleChatCompletions(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, resp.StatusCode)
@@ -323,65 +260,46 @@ func TestHandleChatCompletionsWithInvalidJSON(t *testing.T) {
 }
 
 func TestForwardAndTransformWithErrorResponse(t *testing.T) {
-	// Set up mock server that returns an error
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`Internal Server Error`))
 	}))
 	defer ts.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: ts.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request
 	req := httptest.NewRequest("GET", "/v1/models", nil)
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.forwardAndTransform(w, req)
 
-	// Verify the response status code
 	resp := w.Result()
 	if resp.StatusCode != http.StatusInternalServerError {
-		t.Errorf("Expected status code %d, got %d", http.StatusInternalServerError, resp.StatusCode)
+		 t.Errorf("Expected status code %d, got %d", http.StatusInternalServerError, resp.StatusCode)
 	}
 }
 
 func TestHandleChatCompletionsWithEmptyBody(t *testing.T) {
-	// Create a dummy config for the handler
-	// URL doesn't matter here
 	cfg := &Config{}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request with an empty body
 	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Call the handler method
 	h.handleChatCompletions(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, resp.StatusCode)
@@ -389,22 +307,17 @@ func TestHandleChatCompletionsWithEmptyBody(t *testing.T) {
 }
 
 func TestHandleChatCompletionsWithServerError(t *testing.T) {
-	// Set up mock server that returns an error
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`Server Error`))
 	}))
 	defer ts.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: ts.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request body
 	chatReq := OpenAIChatRequest{
 		Model: "test-model",
 		Messages: []MessageItem{
@@ -416,23 +329,16 @@ func TestHandleChatCompletionsWithServerError(t *testing.T) {
 	}
 	body, _ := json.Marshal(chatReq)
 
-	// Create a test request
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.handleChatCompletions(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Errorf("Expected status code %d, got %d", http.StatusBadGateway, resp.StatusCode)
@@ -440,23 +346,17 @@ func TestHandleChatCompletionsWithServerError(t *testing.T) {
 }
 
 func TestHandleChatCompletionsWithInvalidModel(t *testing.T) {
-	// Set up mock server for OpenWebUI
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate model not found or other issue
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "Model not found"}`))
 	}))
 	defer ts.Close()
 
-	// Create a dummy config for the handler
 	cfg := &Config{
-		// Set mock URL in config
 		OpenWebUIURL: ts.URL,
 	}
-	// Create a handler instance with the config
 	h := &handler{Config: cfg}
 
-	// Create a test request body with potentially invalid model
 	chatReq := OpenAIChatRequest{
 		Model: "invalid-model",
 		Messages: []MessageItem{
@@ -468,23 +368,16 @@ func TestHandleChatCompletionsWithInvalidModel(t *testing.T) {
 	}
 	body, _ := json.Marshal(chatReq)
 
-	// Create a test request
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Inject logger into context
 	ctx := logr.NewContext(context.Background(), logr.Discard())
 	req = req.WithContext(ctx)
 
-	// Create a response recorder
 	w := httptest.NewRecorder()
 
-	// Config already holds the mock server URL
-
-	// Call the handler method
 	h.handleChatCompletions(w, req)
 
-	// Verify the response
 	resp := w.Result()
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Errorf("Expected status code %d, got %d", http.StatusBadGateway, resp.StatusCode)
@@ -829,5 +722,3 @@ func isPortInUse(port int) bool {
 	// Successful connection indicates port is in use
 	return true
 }
-
-

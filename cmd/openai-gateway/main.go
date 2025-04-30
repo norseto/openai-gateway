@@ -23,9 +23,7 @@ func main() {
 		logger.FromContext(cmd.Context()).Info("Starting OpenAI Gateway", "version", gw.RELEASE_VERSION, "git_version", gw.GitVersion)
 	})
 
-	// Add the gateway server command
 	rootCmd.AddCommand(gateway.NewServeCommand())
-	// Add the quit command
 	rootCmd.AddCommand(gateway.NewQuitCommand())
 
 	if err := rootCmd.Execute(); err != nil {

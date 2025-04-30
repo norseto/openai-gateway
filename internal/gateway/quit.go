@@ -18,7 +18,6 @@ const (
 
 // NewQuitCommand creates a new cobra command for sending the quit signal.
 func NewQuitCommand() *cobra.Command {
-	// Define quitPort variable within the function scope
 	var quitPort int
 
 	cmd := &cobra.Command{
@@ -27,8 +26,6 @@ func NewQuitCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logger.FromContext(cmd.Context())
 
-			// Construct the URL using the quitPort variable set by the flag
-			// Host is hardcoded to 127.0.0.1 for security
 			quitURL := fmt.Sprintf("http://127.0.0.1:%d/quitquitquit", quitPort)
 			log.Info("Sending shutdown signal", "url", quitURL)
 
@@ -44,7 +41,6 @@ func NewQuitCommand() *cobra.Command {
 
 			resp, err := client.Do(req)
 			if err != nil {
-				// Check if it's a connection error (server likely not running)
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					log.Error(err, "Quit request timed out", "timeout", quitTimeout)
 					return fmt.Errorf("quit request timed out: %w", err)
@@ -52,11 +48,9 @@ func NewQuitCommand() *cobra.Command {
 				if opErr, ok := err.(*net.OpError); ok {
 					if sysErr, ok := opErr.Err.(*os.SyscallError); ok && sysErr.Err == syscall.ECONNREFUSED {
 						log.Info("Gateway server not found or not running at target address", "target_url", quitURL)
-						// Consider this non-fatal for the quit command, as the goal is achieved (server is not running)
 						return nil
 					}
 				}
-				// Other errors
 				log.Error(err, "Failed to send quit request")
 				return fmt.Errorf("failed to send quit request: %w", err)
 			}
@@ -73,7 +67,6 @@ func NewQuitCommand() *cobra.Command {
 		},
 	}
 
-	// Use the local quitPort variable for the flag
 	cmd.Flags().IntVar(&quitPort, "quit-port", 8081, "Internal port where the target gateway's quit server listens")
 
 	return cmd

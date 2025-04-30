@@ -31,13 +31,9 @@ var (
 
 // Config holds the application configuration, excluding the logger.
 type Config struct {
-	// Port is the port number for the main server to listen on.
 	Port int
-	// OpenWebUIURL is the URL of the Open-WebUI API endpoint.
 	OpenWebUIURL string
-	// QuitPort is the port number for the internal quit signal server.
 	QuitPort int
-	// ShutdownTimeoutSec is the timeout for graceful shutdown in seconds.
 	ShutdownTimeoutSec int
 }
 
@@ -462,4 +458,3 @@ func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func randomString(_ int) string {
 	return uuid.NewString()
 }
-
