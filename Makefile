@@ -1,6 +1,6 @@
 # OpenAI Gateway Makefile
 
-.PHONY: all build run test clean help set-version get-version build-installer tag-release
+.PHONY: all build run test test-coverage clean help set-version get-version build-installer tag-release
 
 OUT_BIN_DIR=bin
 BINARY_NAME=openai-gateway
@@ -25,7 +25,7 @@ run: build
 
 test:
 	@echo "Running tests..."
-	go test ./... -coverprofile cover.out
+	go test ./... -coverprofile=coverage.out
 
 clean:
 	@echo "Cleaning up..."
@@ -38,8 +38,18 @@ help:
 	@echo "  make run           - Build and run the application"
 	@echo "  make test          - Run tests"
 	@echo "  make clean         - Clean up build artifacts"
+	@echo "  make test-coverage - Run tests and generate HTML coverage report"
+	@echo "  make clean         - Clean up build artifacts"
 	@echo "  make docker-buildx - Build multi-arch Docker image (amd64, arm64) using buildx"
 	@echo "  make help          - Show this help message"
+
+.PHONY: test-coverage
+test-coverage:
+	@echo "Running tests and generating coverage report..."
+	@go test -coverprofile=coverage.out ./...
+	@echo "Generating HTML coverage report (coverage.html)..."
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
 # Version management targets
 .PHONY: set-version

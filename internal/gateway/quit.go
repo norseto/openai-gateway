@@ -18,13 +18,16 @@ const (
 
 // NewQuitCommand creates a new cobra command for sending the quit signal.
 func NewQuitCommand() *cobra.Command {
+	// Define quitPort variable within the function scope
+	var quitPort int
+
 	cmd := &cobra.Command{
 		Use:   "quit",
 		Short: "Sends a shutdown signal to a running gateway server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logger.FromContext(cmd.Context())
 
-			// Construct the URL using the shared quitPort variable
+			// Construct the URL using the quitPort variable set by the flag
 			// Host is hardcoded to 127.0.0.1 for security
 			quitURL := fmt.Sprintf("http://127.0.0.1:%d/quitquitquit", quitPort)
 			log.Info("Sending shutdown signal", "url", quitURL)
@@ -70,7 +73,8 @@ func NewQuitCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&quitPort, "quit-port", defaultQuitPort, "Internal port for the quit signal server")
+	// Use the local quitPort variable for the flag
+	cmd.Flags().IntVar(&quitPort, "quit-port", 8081, "Internal port where the target gateway's quit server listens")
 
 	return cmd
 }

@@ -21,14 +21,25 @@ import (
 )
 
 var (
-	port         int
-	openWebUIURL string
-	quitPort     int
-	shutdownTimeoutSec int
-	defaultPort  int = 8080
+	// defaultPort is the default port number for the main server.
+	defaultPort int = 8080
+	// defaultQuitPort is the default port number for the quit server.
 	defaultQuitPort int = 8081
+	// defaultShutdownTimeoutSec is the default timeout for graceful shutdown.
 	defaultShutdownTimeoutSec int = 15
 )
+
+// Config holds the application configuration, excluding the logger.
+type Config struct {
+	// Port is the port number for the main server to listen on.
+	Port int
+	// OpenWebUIURL is the URL of the Open-WebUI API endpoint.
+	OpenWebUIURL string
+	// QuitPort is the port number for the internal quit signal server.
+	QuitPort int
+	// ShutdownTimeoutSec is the timeout for graceful shutdown in seconds.
+	ShutdownTimeoutSec int
+}
 
 // OpenAI Compatible Request Structure
 type OpenAIChatRequest struct {
@@ -76,13 +87,28 @@ type OpenWebUIModel struct {
 }
 
 type handler struct {
+	// Config holds the application configuration.
+	Config *Config
 }
 
 func NewServeCommand() *cobra.Command {
+	var port int
+	var openWebUIURL string
+	var quitPort int
+	var shutdownTimeoutSec int
+
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Starts the OpenAI compatible gateway server",
-		RunE:  processServe,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := &Config{
+				Port:               port,
+				OpenWebUIURL:       openWebUIURL,
+				QuitPort:           quitPort,
+				ShutdownTimeoutSec: shutdownTimeoutSec,
+			}
+			return processServe(cmd.Context(), cfg)
+		},
 	}
 
 	cmd.Flags().IntVar(&port, "port", defaultPort, "Port number to listen on")
@@ -91,132 +117,136 @@ func NewServeCommand() *cobra.Command {
 	cmd.Flags().IntVar(&shutdownTimeoutSec, "shutdown-timeout", defaultShutdownTimeoutSec, "Timeout for graceful shutdown in seconds")
 	_ = cmd.MarkFlagRequired("open-webui-url")
 
+
 	return cmd
 }
 
-// wrapWithLogger is a middleware that injects the base logger into the request context.
-func wrapWithLogger(baseLog logr.Logger, next http.HandlerFunc) http.HandlerFunc {
+// wrapLogger is a middleware that injects the base logger into the request context.
+func wrapLogger(log logr.Logger, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Create a new logger context for the request, inheriting settings from baseLog
-		ctx := logr.NewContext(r.Context(), baseLog)
-		// Call the actual handler with the modified context
+		ctx := logger.WithContext(r.Context(), log)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
 // handleQuitSignal handles the request to the internal quit endpoint.
-func handleQuitSignal(stopChan chan<- struct{}, log logr.Logger, closeOnce *sync.Once) http.HandlerFunc {
+// It gets the logger from the request context.
+func handleQuitSignal(stopChan chan<- struct{}, closeOnce *sync.Once) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log := logger.FromContext(r.Context())
 		log.Info("Received shutdown signal via /quitquitquit")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Initiating shutdown..."))
-		// Use sync.Once to ensure close is called only once
 		closeOnce.Do(func() { close(stopChan) })
 	}
 }
 
 // runMainServer runs the main API server in a goroutine.
-func runMainServer(srv *http.Server, log logr.Logger, stopChan chan<- struct{}, closeOnce *sync.Once) {
-	log.Info("Gateway server starting", "address", srv.Addr, "forwarding_url", openWebUIURL)
+func runMainServer(ctx context.Context, cfg *Config, srv *http.Server, stopChan chan<- struct{}, closeOnce *sync.Once) {
+	log := logger.FromContext(ctx)
+	log.Info("Gateway server starting", "address", srv.Addr, "forwarding_url", cfg.OpenWebUIURL)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error(err, "Main server ListenAndServe error")
-		// Signal shutdown on server error too, using sync.Once
 		closeOnce.Do(func() { close(stopChan) })
 	}
 }
 
 // runQuitServer runs the internal quit server in a goroutine.
-func runQuitServer(srv *http.Server, log logr.Logger) {
+func runQuitServer(ctx context.Context, srv *http.Server) {
+	log := logger.FromContext(ctx)
 	log.Info("Internal quit server starting", "address", srv.Addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error(err, "Quit server ListenAndServe error")
-		// We don't necessarily stop the main process if the quit server fails.
 	}
 }
 
-func processServe(cmd *cobra.Command, args []string) error {
-	baseLog := logger.FromContext(cmd.Context())
+// setupServers initializes the main API server and the internal quit server.
+func setupServers(ctx context.Context, cfg *Config, h *handler, stopChan chan struct{}, closeOnce *sync.Once) (*http.Server, *http.Server) {
+	log := logger.FromContext(ctx)
 
-	if openWebUIURL == "" {
-		baseLog.Error(fmt.Errorf("--open-webui-url is required"), "Startup error")
-		return fmt.Errorf("--open-webui-url is required")
-	}
-
-	// --- Server Setup ---
-	addr := fmt.Sprintf(":%d", port)
-
-	// Construct quit address dynamically using quitPort
-	quitAddrStr := fmt.Sprintf("127.0.0.1:%d", quitPort)
-
-	// Create handler instance (no logger needed here)
-	h := &handler{}
-
-	// Main API Server Mux
+	addr := fmt.Sprintf(":%d", cfg.Port)
 	mainMux := http.NewServeMux()
-	// Use wrapWithLogger to inject logger context before calling the actual handlers
-	mainMux.HandleFunc("/", wrapWithLogger(baseLog, h.handleRoot))
-	mainMux.HandleFunc("/healthz", wrapWithLogger(baseLog, h.handleHealth))
-
+	mainMux.HandleFunc("/", wrapLogger(log, h.handleRoot))
+	mainMux.HandleFunc("/healthz", wrapLogger(log, h.handleHealth))
 	mainSrv := &http.Server{
 		Addr:    addr,
 		Handler: mainMux,
 	}
 
-	// Channel to signal shutdown
-	stopChan := make(chan struct{})
-	var closeOnce sync.Once
-
-	// Quit Server Mux (Internal)
+	quitAddrStr := fmt.Sprintf("127.0.0.1:%d", cfg.QuitPort)
 	quitMux := http.NewServeMux()
-	// Use the named handler function, passing necessary variables including closeOnce
-	quitMux.HandleFunc("/quitquitquit", handleQuitSignal(stopChan, baseLog, &closeOnce))
-
+	quitMux.HandleFunc("/quitquitquit", handleQuitSignal(stopChan, closeOnce))
 	quitSrv := &http.Server{
 		Addr:    quitAddrStr,
 		Handler: quitMux,
 	}
 
-	// Goroutine to run the main server using the named function, passing closeOnce
-	go runMainServer(mainSrv, baseLog, stopChan, &closeOnce)
+	return mainSrv, quitSrv
+}
 
-	// Goroutine to run the quit server using the named function
-	go runQuitServer(quitSrv, baseLog)
+// startServers starts the main and quit servers in separate goroutines.
+func startServers(ctx context.Context, cfg *Config, mainSrv, quitSrv *http.Server, stopChan chan struct{}, closeOnce *sync.Once) {
+	go runMainServer(ctx, cfg, mainSrv, stopChan, closeOnce)
+	go runQuitServer(ctx, quitSrv)
+}
 
-	// --- Wait for shutdown signal ---
+// waitForShutdownSignal blocks until a shutdown signal (OS or internal) is received.
+func waitForShutdownSignal(ctx context.Context, stopChan <-chan struct{}) {
+	log := logger.FromContext(ctx)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case sig := <-sigChan:
-		baseLog.Info("Received OS signal, initiating shutdown", "signal", sig.String())
+		log.Info("Received OS signal, initiating shutdown", "signal", sig.String())
 	case <-stopChan:
-		baseLog.Info("Received internal signal, initiating shutdown")
+		log.Info("Received internal signal, initiating shutdown")
 	}
+}
 
-	// --- Graceful shutdown ---
-	baseLog.Info("Starting graceful shutdown...")
-
-	// Create a context with timeout for shutdown
-	shutdownTimeout := time.Duration(shutdownTimeoutSec) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+// shutdownServers performs graceful shutdown of the main and quit servers.
+func shutdownServers(ctx context.Context, cfg *Config, mainSrv, quitSrv *http.Server) {
+	log := logger.FromContext(ctx)
+	log.Info("Starting graceful shutdown...")
+	shutdownTimeout := time.Duration(cfg.ShutdownTimeoutSec) * time.Second
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	// Shutdown the main server
-	if err := mainSrv.Shutdown(ctx); err != nil {
-		baseLog.Error(err, "Main server shutdown error")
+	if err := mainSrv.Shutdown(shutdownCtx); err != nil {
+		log.Error(err, "Main server shutdown error")
 	} else {
-		baseLog.Info("Main server gracefully stopped")
+		log.Info("Main server gracefully stopped")
 	}
 
-	// Shutdown the quit server
-	if err := quitSrv.Shutdown(ctx); err != nil {
-		baseLog.Error(err, "Quit server shutdown error")
+	if err := quitSrv.Shutdown(shutdownCtx); err != nil {
+		log.Error(err, "Quit server shutdown error")
 	} else {
-		baseLog.Info("Quit server gracefully stopped")
+		log.Info("Quit server gracefully stopped")
 	}
 
-	baseLog.Info("Graceful shutdown complete")
-	return nil // Graceful shutdown is not an error for the command
+	log.Info("Graceful shutdown complete")
+}
+
+// processServe is the main execution function for the serve command.
+func processServe(ctx context.Context, cfg *Config) error {
+	log := logger.FromContext(ctx)
+
+	if cfg.OpenWebUIURL == "" {
+		log.Error(fmt.Errorf("--open-webui-url is required"), "Startup error")
+		return fmt.Errorf("--open-webui-url is required")
+	}
+
+	stopChan := make(chan struct{})
+	var closeOnce sync.Once
+
+	h := &handler{Config: cfg}
+
+	mainSrv, quitSrv := setupServers(ctx, cfg, h, stopChan, &closeOnce)
+	startServers(ctx, cfg, mainSrv, quitSrv, stopChan, &closeOnce)
+	waitForShutdownSignal(ctx, stopChan)
+	shutdownServers(ctx, cfg, mainSrv, quitSrv)
+
+	return nil
 }
 
 func (h *handler) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -261,7 +291,7 @@ func (h *handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	targetURL := openWebUIURL + "/chat"
+	targetURL := h.Config.OpenWebUIURL + "/chat"
 	log.Info("Forwarding request to Open-WebUI", "url", targetURL)
 	req, err := http.NewRequest("POST", targetURL, bytes.NewReader(webuiReqBody))
 	if err != nil {
@@ -338,7 +368,7 @@ func (h *handler) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 func (h *handler) forwardAndTransform(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context()).WithValues("request_id", randomString(8))
 	targetPath := strings.TrimPrefix(r.URL.Path, "/v1")
-	targetURL := openWebUIURL + targetPath
+	targetURL := h.Config.OpenWebUIURL + targetPath
 	log.Info("Forwarding request", "target_url", targetURL)
 
 	var req *http.Request
@@ -402,9 +432,7 @@ func (h *handler) forwardAndTransform(w http.ResponseWriter, r *http.Request) {
 func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	log := logger.FromContext(r.Context()).WithValues("request_id", randomString(8))
 	log.V(1).Info("Health check request received")
-	// Simple health check: check if Open-WebUI is reachable
-	// Assuming /health exists
-	req, err := http.NewRequest("GET", openWebUIURL+"/health", nil)
+	req, err := http.NewRequest("GET", h.Config.OpenWebUIURL+"/health", nil)
 	if err != nil {
 		log.Error(err, "Failed to create health check request")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -434,3 +462,4 @@ func (h *handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func randomString(_ int) string {
 	return uuid.NewString()
 }
+
